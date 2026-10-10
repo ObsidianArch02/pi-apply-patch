@@ -180,8 +180,6 @@ function hasErrorCode(error: unknown, code: string): boolean {
 	return Boolean(error && typeof error === "object" && "code" in error && error.code === code);
 }
 
-const GPT_APPLY_PATCH_PROVIDERS = new Set(["openai", "openai-codex", "azure-openai-responses", "github-copilot"]);
-const GPT_APPLY_PATCH_APIS = new Set(["openai-responses", "openai-codex-responses"]);
 export const PATCH_PREVIEW_MAX_LINES = 16;
 export const PATCH_PREVIEW_MAX_CHARS = 4000;
 const PATCH_PREVIEW_HEAD_LINES = 8;
@@ -343,13 +341,7 @@ eof_line: "*** End of File" LF
 export function isOpenAIGptModel(
 	model: (Pick<Model<string>, "provider" | "id"> & Partial<Pick<Model<string>, "api">>) | undefined,
 ): boolean {
-	if (!model?.id.startsWith("gpt-")) {
-		return false;
-	}
-
-	return (
-		GPT_APPLY_PATCH_PROVIDERS.has(model.provider) || (model.api !== undefined && GPT_APPLY_PATCH_APIS.has(model.api))
-	);
+	return model !== undefined && /gpt/i.test(model.id);
 }
 
 function normalizePatchText(patchText: string): string {
