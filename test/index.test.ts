@@ -165,21 +165,24 @@ describe("pi-apply-patch", () => {
 		expect(harness.getActiveTools()).toEqual(["read", "apply_patch"]);
 	});
 
-	it("#given custom Responses provider with GPT model #when session starts #then enables apply_patch", async () => {
-		// given
-		const harness = createToolsetTestApi(["read", "edit", "write"]);
-		registerApplyPatchExtension(harness.api);
+	it.each(["session_start", "model_select"])(
+		"#given custom provider with prefixed mixed case GPT id #when %s fires #then replaces edit tools with apply_patch",
+		async (eventName) => {
+			// given
+			const harness = createToolsetTestApi(["read", "edit", "write"]);
+			registerApplyPatchExtension(harness.api);
 
-		// when
-		await harness.trigger("session_start", {
-			provider: "my-proxy",
-			id: "gpt-5",
-			api: "openai-responses",
-		});
+			// when
+			await harness.trigger(eventName, {
+				provider: "my-proxy",
+				id: "proxy-gPt-5",
+				api: "custom-api",
+			});
 
-		// then
-		expect(harness.getActiveTools()).toEqual(["read", "apply_patch"]);
-	});
+			// then
+			expect(harness.getActiveTools()).toEqual(["read", "apply_patch"]);
+		},
+	);
 
 	it("#given non GPT model and no original edit tools #when session starts #then restores standard edit tools", async () => {
 		// given
@@ -193,25 +196,27 @@ describe("pi-apply-patch", () => {
 		expect(harness.getActiveTools()).toEqual(["read", "edit", "write"]);
 	});
 
-	it("#given external tool change in GPT mode #when agent starts #then reconciles before model request", async () => {
+	it("#given external tool change in custom provider GPT mode #when agent starts #then reconciles before model request", async () => {
 		// given
+		const model = { provider: "my-proxy", id: "gpt-5" };
 		const harness = createToolsetTestApi(["read", "edit", "write"]);
 		registerApplyPatchExtension(harness.api);
-		await harness.trigger("session_start", { provider: "openai", id: "gpt-5" });
+		await harness.trigger("session_start", model);
 		harness.setActiveTools(["read", "write", "apply_patch", "edit"]);
 
 		// when
-		await harness.trigger("before_agent_start", { provider: "openai", id: "gpt-5" });
+		await harness.trigger("before_agent_start", model);
 
 		// then
 		expect(harness.getActiveTools()).toEqual(["read", "apply_patch"]);
 	});
 
-	it("#given GPT mode #when model switches to non GPT #then apply_patch is replaced with edit tools", async () => {
+	it("#given custom provider GPT mode #when model switches to non GPT #then apply_patch is replaced with edit tools", async () => {
 		// given
 		const harness = createToolsetTestApi(["read", "edit", "write"]);
 		registerApplyPatchExtension(harness.api);
-		await harness.trigger("session_start", { provider: "openai", id: "gpt-5" });
+		await harness.trigger("session_start", { provider: "my-proxy", id: "openai/GPT-5" });
+		expect(harness.getActiveTools()).toEqual(["read", "apply_patch"]);
 
 		// when
 		await harness.trigger("model_select", { provider: "anthropic", id: "claude-sonnet-4" });
@@ -1105,14 +1110,31 @@ EOF`;
 		expect(extractPatchedPaths(patch)).toEqual(["src/app.ts", "src/new.ts", "src/old.ts", "src/moved.ts"]);
 	});
 
-	it("#given model metadata #when checking GPT activation #then matches known providers and Responses APIs", () => {
-		expect(isOpenAIGptModel({ provider: "openai", id: "gpt-5" })).toBe(true);
-		expect(isOpenAIGptModel({ provider: "openai-codex", id: "gpt-5.5" })).toBe(true);
-		expect(isOpenAIGptModel({ provider: "my-proxy", id: "gpt-5", api: "openai-responses" })).toBe(true);
-		expect(isOpenAIGptModel({ provider: "codex-proxy", id: "gpt-5", api: "openai-codex-responses" })).toBe(true);
-		expect(isOpenAIGptModel({ provider: "openai", id: "o1" })).toBe(false);
-		expect(isOpenAIGptModel({ provider: "anthropic", id: "gpt-5" })).toBe(false);
-		expect(isOpenAIGptModel({ provider: "my-proxy", id: "claude-sonnet", api: "openai-responses" })).toBe(false);
-		expect(isOpenAIGptModel({ provider: "anthropic-proxy", id: "gpt-5", api: "anthropic-messages" })).toBe(false);
-	});
+	it.each<{ model: ToolsetModel | undefined; expected: boolean }>([
+		{ model: { provider: "openai", id: "gpt-5" }, expected: true },
+		{ model: { provider: "openai-codex", id: "gpt-5.5" }, expected: true },
+		{ model: { provider: "my-proxy", id: "gpt-5", api: "openai-responses" }, expected: true },
+		{ model: { provider: "codex-proxy", id: "gpt-5", api: "openai-codex-responses" }, expected: true },
+		{ model: { provider: "anthropic", id: "gpt-5" }, expected: true },
+		{ model: { provider: "anthropic-proxy", id: "gpt-5", api: "anthropic-messages" }, expected: true },
+		{ model: { provider: "my-proxy", id: "gpt-5", api: "custom-api" }, expected: true },
+		{ model: { provider: "my-proxy", id: "gpt-5" }, expected: true },
+		{ model: { provider: "openai", id: "GPT-5" }, expected: true },
+		{ model: { provider: "my-proxy", id: "openai/GPT-5" }, expected: true },
+		{ model: { provider: "my-proxy", id: "proxy-gPt-5" }, expected: true },
+		{ model: { provider: "my-proxy", id: "GPT" }, expected: true },
+		{ model: { provider: "my-proxy", id: "prefixgPtsuffix" }, expected: true },
+		{ model: undefined, expected: false },
+		{ model: { provider: "openai", id: "" }, expected: false },
+		{ model: { provider: "my-proxy", id: "", api: "openai-responses" }, expected: false },
+		{ model: { provider: "openai", id: "o1" }, expected: false },
+		{ model: { provider: "my-proxy", id: "claude-sonnet", api: "openai-responses" }, expected: false },
+		{ model: { provider: "openai-codex", id: "claude-sonnet", api: "openai-codex-responses" }, expected: false },
+		{ model: { provider: "gpt-provider", id: "claude-sonnet", api: "gpt-api" }, expected: false },
+	])(
+		"#given model $model #when checking GPT activation #then returns $expected based only on case insensitive id substring",
+		({ model, expected }) => {
+			expect(isOpenAIGptModel(model)).toBe(expected);
+		},
+	);
 });

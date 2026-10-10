@@ -1,6 +1,6 @@
 # pi-apply-patch
 
-Codex-style `apply_patch` tool extension for the [pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). It registers a freeform grammar patch tool for OpenAI GPT-family models and swaps out `write` / `edit` while those models are active.
+Codex-style `apply_patch` tool extension for the [pi coding agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). It registers a freeform grammar patch tool for models whose IDs contain `gpt`, regardless of case. It replaces `write` / `edit` while those models are active.
 
 ## Behavior
 
@@ -8,9 +8,8 @@ The extension registers one LLM-callable tool: `apply_patch`. The tool accepts C
 
 | Case | Result |
 |------|--------|
-| OpenAI GPT provider active | replaces `write` and `edit` with `apply_patch` |
-| Custom `openai-responses` GPT provider active | replaces `write` and `edit` with `apply_patch` |
-| Non-GPT model active | restores the original `write` and `edit` toolset |
+| Model ID contains `gpt` (case insensitive), with any provider or API | replaces `write` and `edit` with `apply_patch` |
+| Model ID does not contain `gpt` | restores the original `write` and `edit` toolset |
 | Raw freeform patch input | accepted and applied |
 | JSON `{ "input": "..." }` patch input | accepted and applied |
 | Absolute or parent-escaping path | accepted and resolved by Node path semantics |
@@ -35,7 +34,7 @@ Use this tool to edit files with the Codex patch format.
 
 Pi exposes this as a freeform grammar tool. Models with `compat.supportsOpenAIGrammarTools` enabled receive an OpenAI custom grammar tool; other Responses-compatible models fall back to a function tool with an `input` string.
 
-Custom provider names are supported when the model id starts with `gpt-` and its Pi API is `openai-responses` or `openai-codex-responses`. For example, a model registered as `my-proxy/gpt-5` with `api: "openai-responses"` activates `apply_patch` without adding the provider name to a hard-coded allowlist.
+The extension activates when the model ID contains `gpt` anywhere, regardless of case. The provider and API do not affect activation. For example, `gpt-5`, `GPT-5`, and `my-proxy/GPT-5` all activate `apply_patch`.
 
 ## Installation
 
